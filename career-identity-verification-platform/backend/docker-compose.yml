@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  auth-service:
+    build: ./services/auth-service
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./services/auth-service:/app
+      - /app/node_modules
+  # Add other services here as they are developed
