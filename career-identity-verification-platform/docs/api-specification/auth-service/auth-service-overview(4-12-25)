@@ -172,3 +172,78 @@ The changes are written back to MongoDB. The user is now officially verified.
 Response: The server sends a JSON response (or could redirect to a frontend login page):
 
 { "message": "Email verified successfully. You can now login." }
+
+
+Login Flow (/login)
+
+Goal: Authenticate the user and issue secure tokens for accessing the system.
+
+Step 1: The Request
+User sends a POST request with email and password.
+Step 2: Validation & Security Checks
+User Lookup: Checks if the email exists in the database.
+Password Check: Uses bcrypt to compare the provided password with the stored hash.
+Verification Check: Crucial: It explicitly checks if (!user.isEmailVerified). If the user hasn't verified their email yet, login is blocked.
+Step 3: Token Generation
+Access Token: Generates a short-lived JWT (e.g., 15 mins) containing the user's ID and role. This is used for API requests.
+Refresh Token: Generates a long-lived opaque token (random string).
+Step 4: Session Management
+The Refresh Token is saved to the database (RefreshToken collection) along with metadata:
+expiresAt: Set to 7 days in the future.
+ipAddress & userAgent: For security auditing (tracking where the login came from).
+Updates the user's lastLoginAt timestamp.
+Step 5: Response
+Returns both tokens (accessToken, 
+refreshToken
+) and basic user info.
+
+Refresh Token Flow (/refresh)
+
+Goal: Get a new Access Token when the old one expires, without forcing the user to log in again.
+
+Step 1: The Request
+Client sends a POST request with the 
+refreshToken
+.
+Step 2: Validation
+Database Lookup: Finds the refresh token in the database.
+Security Checks: It fails if the token is:
+Not found.
+Revoked (already used or cancelled).
+Expired (older than 7 days).
+Step 3: Token Rotation (Security Best Practice)
+The server does not just give back an access token. It performs Rotation:
+Revokes the old refresh token (marks revoked = true).
+Generates a completely new refresh token.
+Saves the new token to the DB.
+Why? If a refresh token is stolen, it can only be used once. If the thief tries to use it again, it will fail (because it's revoked), alerting the system.
+Step 4: Response
+Returns a new accessToken and the new 
+refreshToken
+.
+
+Logout Flow (/logout)
+
+Goal: Securely end the session.
+
+Step 1: The Request
+Client sends a POST request with the 
+refreshToken
+ they want to invalidate.
+Step 2: Revocation
+The server finds that specific token in the database and sets revoked: true.
+Result: That specific refresh token can no longer be used to generate new access tokens. Even if the user still has the token string, it is useless.
+
+Get Current User (/me)
+Goal: Retrieve the profile of the currently logged-in user.
+
+Step 1: The Request
+Client sends a GET request.
+Prerequisite: This route is "protected". The request must have a valid Access Token in the Authorization header (handled by middleware before reaching this controller).
+Step 2: Identification
+The middleware decodes the token and attaches the user ID to req.user.sub.
+Step 3: Data Retrieval
+The controller finds the user by ID: User.findById(req.user.sub).
+Filtering: It explicitly excludes sensitive data using .select('-passwordHash') so the password hash is never sent to the client.
+Step 4: Response
+Returns the user object (Name, Email, Role, ID).
