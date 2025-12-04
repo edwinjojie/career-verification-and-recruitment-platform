@@ -1,0 +1,174 @@
+Auth Service Overview & Debugging Guide
+This document provides a detailed explanation of the auth-service architecture to help you understand how it works and debug issues effectively.
+
+1. High-Level Architecture
+The auth-service is a Node.js microservice built with Express.js. It handles user authentication and authorization using JWT (JSON Web Tokens) and stores data in MongoDB.
+
+Key Technologies
+Runtime: Node.js
+Framework: Express.js
+Database: MongoDB (using Mongoose ODM)
+Authentication: JWT (Access Tokens + Refresh Tokens)
+Security: Helmet, CORS, Bcrypt (password hashing)
+Documentation: Swagger UI
+2. Project Structure & Flow
+Here is how the request flows through the application:
+
+Entry Point: 
+src/server.js
+This is the file that starts the application.
+It first connects to MongoDB using 
+connectDB()
+.
+Critical for Debugging: If the DB connection fails here (as seen in your logs), the server will not start.
+Once connected, it starts listening on the port defined in 
+.env
+ (default: 3002).
+App Configuration: 
+    src/app.js
+    Sets up the Express application.
+Middleware:
+  helmet(): Adds security headers.
+  cors(): Allows requests from other domains (e.g., frontend).
+  express.json(): Parses incoming JSON request bodies.
+  Routes: Mounts authentication routes at /api/v1/auth.
+  Swagger: Serves API documentation at /api-docs.
+
+Database Connection: 
+    src/config/db.js
+    Handles the connection to MongoDB Atlas.
+    Uses mongoose.connect(env.MONGO_URI).
+    Current Issue: The error MongooseServerSelectionError happens here because the MongoDB driver cannot reach the Atlas cluster, likely due to IP restrictions.
+Environment Variables: 
+    src/config/env.js
+Centralizes configuration management.
+Loads variables from 
+.env
+.
+Key Variables:
+    MONGO_URI: Connection string for MongoDB.
+    JWT_SECRET: Secret key for signing tokens.
+3. Key Components
+Models (src/models/)
+    User.js
+    : Defines the user schema (email, password hash, role, verification status).
+    RefreshToken.js
+    : Stores refresh tokens to allow users to stay logged in without re-entering passwords.
+Routes & Controllers (src/routes/ & src/controllers/)
+    The API endpoints are defined in authRoutes.js and implemented in authController.js:
+
+    Endpoint	Method	Function	Description
+    /register	POST	register    Creates a new user, hashes password, sends mock verification email.
+    /login	    POST	login       Validates credentials, returns Access & Refresh tokens.
+    /verify-email GET	verifyEmail Verifies user's email using a token.
+    /refresh	POST	refreshToken Issues a new Access Token using a valid Refresh Token.
+    /logout	    POST	logout      Revokes the Refresh Token.
+    /me	        GET     getMe       Returns current user's profile (protected route).
+
+
+Once the server starts successfully:
+
+Open http://localhost:3002/api-docs to see the Swagger UI.
+
+
+####  REGISTRATION DATAFLOW   ####
+
+Here is the detailed breakdown of the code execution path:
+
+Step 1: The Request
+    The user sends a POST request to http://localhost:3002/api/v1/auth/register with a JSON body:
+        {
+        "email": "jane@example.com",
+        "password": "securePassword123",
+        "name": "Jane Doe"
+        }
+
+Step 2: Routing (src/routes/authRoutes.js)
+
+    The Express router sees the path /register and directs the request to the register function in src/controllers/authController.js
+
+Step 3: The Controller Logic (src/controllers/authController.js)
+
+    Inside exports.register, the following happens sequentially:
+
+    Input Extraction:    const { email, password, name, role } = req.body;
+        The code pulls the raw data from the request body.
+
+    Duplicate Check:
+    const existingUser = await User.findOne({ email });
+    It asks MongoDB: "Is there already a user with this email?"
+
+    If yes: Returns 400 Email already registered.
+    If no: Continues.
+Password Hashing (Security Critical):
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+Crucial: We NEVER store the plain password. We use bcrypt to turn "securePassword123" into a secure hash like $2b$10$EixZa....
+
+Token Generation: It creates a random string to use for email verification.
+
+const emailVerificationToken = crypto.randomBytes(32).toString('hex');
+Database Insertion: It creates the new User document in MongoDB.
+
+const user = await User.create({
+    email,
+    passwordHash, // Storing the HASH, not the password
+    name,
+    emailVerificationToken,
+    status: 'pending' // Default status
+});
+Email Notification: It calls the mock email service to log the verification link to the console.
+
+await sendVerificationEmail(user.email, emailVerificationToken);
+Response: Finally, it sends a success response back to the user.
+
+{
+    "message": "Registration successful. Please verify your email.",
+    "userId": "656e..."
+}
+
+The user is now created but cannot login yet because isEmailVerified is false.
+
+User checks their email (or server logs in this case) for the link: http://localhost:3002/api/v1/auth/verify-email?token=...
+User clicks the link (GET request).
+Server finds the user with that specific token.
+Server updates isEmailVerified = true and clears the token.
+User can now Login
+
+Email Verification Flow (When Link is Pressed):
+This explains what happens when the user clicks http://localhost:3002/api/v1/auth/verify-email?token=....
+
+Step 1: The Request
+The browser sends a GET request to the server. The important part is the ?token=... query parameter at the end of the URL.
+
+Step 2: Routing
+The router directs GET /verify-email to authController.verifyEmail.
+
+Step 3: Controller Logic (
+verifyEmail
+)
+Token Extraction:
+
+const { token } = req.query;
+It grabs the token string from the URL.
+
+User Lookup (The Key Step):
+
+const user = await User.findOne({ emailVerificationToken: token });
+It searches the database for a user who has this exact token stored in their emailVerificationToken field.
+
+If no user found: Returns 400 Invalid or expired token. This prevents fake or reused tokens.
+Status Update: If the user is found, we modify their document:
+
+user.isEmailVerified = true;       // Mark as verified
+user.emailVerificationToken = undefined; // DELETE the token (One-time use!)
+user.status = 'active';            // Activate the account
+Save to Database:
+
+await user.save();
+The changes are written back to MongoDB. The user is now officially verified.
+
+Response: The server sends a JSON response (or could redirect to a frontend login page):
+
+{ "message": "Email verified successfully. You can now login." }
