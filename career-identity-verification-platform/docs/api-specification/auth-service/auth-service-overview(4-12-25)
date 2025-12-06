@@ -71,6 +71,31 @@ Once the server starts successfully:
 Open http://localhost:3002/api-docs to see the Swagger UI.
 
 
+4. Security & Authorization
+
+Role-Based Access Control (RBAC)
+The system implements RBAC to manage user permissions.
+- Roles:
+    - candidate (Default)
+    - recruiter
+    - executive
+    - admin
+- Implementation:
+    - The `User` model stores the `role`.
+    - The `authMiddleware.restrictTo(...roles)` function protects routes based on these roles.
+    - The Access Token (JWT) payload includes the user's `role`, allowing other microservices to make authorization decisions without querying the Auth Service database.
+- Registration Note: Public registration should default to the 'candidate' role to prevent privilege escalation.
+
+Secrets Management (JWT Configuration)
+The service uses Asymmetric Encryption (RS256) for JSON Web Tokens.
+- Keys:
+    - `secrets/jwt_private.pem`: Private key used by Auth Service to SIGN tokens. MUST be kept secret.
+    - `secrets/jwt_public.pem`: Public key used by Auth Service (and other services) to VERIFY tokens.
+- Benefits:
+    - Decouples authentication from verification.
+    - Other microservices (e.g., Candidate Service) can validate tokens using the Public Key without needing a direct connection to the Auth Service or sharing a sensitive secret key.
+
+
 ####  REGISTRATION DATAFLOW   ####
 
 Here is the detailed breakdown of the code execution path:
