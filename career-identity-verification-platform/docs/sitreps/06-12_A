@@ -1,0 +1,385 @@
+Below is a clean, comprehensive, production-grade project context package that you can paste directly into your AI IDE.
+It contains:
+
+Project Overview & Purpose
+
+Problem Statement
+
+Objectives
+
+System Architecture (Current State)
+
+SITREP (Technical Status Report)
+
+Completed Components Summary
+
+Next Phase: Admin Service Specification
+
+Admin Service Implementation Roadmap
+
+This is written formally and structured for engineering tools.
+
+1. PROJECT CONTEXT
+1.1 Project Name
+
+Career Identity Verification & Recruitment Management Platform
+
+1.2 Project Domain
+
+Digital recruitment infrastructure enabling identity-verified hiring, candidate management, recruiter workflows, and administrative governance.
+
+1.3 Purpose
+
+To build a secure, scalable, multi-role recruitment platform consisting of microservices that authenticate users, manage candidate and recruiter interactions, enforce role-based access control (RBAC), and provide administrative oversight for account creation, user lifecycle, and system intelligence.
+
+The platform ensures:
+
+Verified and secure user authentication
+
+Controlled creation of privileged accounts (recruiters, executives, admins)
+
+Accurate, transparent recruitment workflows
+
+Modular microservice architecture for scalability
+
+Clean separation of responsibilities between services
+
+2. PROBLEM STATEMENT
+
+Organizations struggle with:
+
+Fake candidate identities
+
+Recruiters registering without verification
+
+Weak access control mechanisms
+
+Centralized monolithic systems that do not scale
+
+Lack of lifecycle control for user accounts
+
+No unified admin governance layer
+
+The solution requires:
+
+A secure authentication system
+
+Role-based access control
+
+Controlled recruiter & admin onboarding
+
+Admin-managed system governance
+
+A modular approach using microservices
+
+A frontend UI integrating multiple roles
+
+3. PROJECT OBJECTIVES
+Core System Goals
+
+Implement reliable authentication using JWT (access + refresh tokens).
+
+Enforce strict RBAC across services.
+
+Build a secure Admin Service to manage privileged users.
+
+Enable candidate onboarding via public registration.
+
+Allow recruiters to be created strictly by admins.
+
+Provide scalable microservice architecture for future modules.
+
+Administrative Goals
+
+Control lifecycle of recruiters, executives, and admins.
+
+Provide admin workflows for approval, banning, and role changes.
+
+Offer system-wide visibility into platform usage.
+
+4. SYSTEM ARCHITECTURE (CURRENT STATE – POST-AUTH COMPLETION)
+Microservices (present & future)
+
+Auth Service — Completed
+
+Admin Service — Next to build
+
+Candidate Service — Future
+
+Recruiter Service — Future
+
+Job Service — Future
+
+Notification Service — Future
+
+Application/Workflow Service — Future
+
+Current Data Flow
+Frontend (React/Next.js)
+     → Auth Service (public endpoints)
+         /register (candidate only)
+         /login
+         /refresh
+         /me
+
+Admin Service (internal calls)
+     → Auth Service (internal endpoints)
+         /internal/register
+         /internal/update-role
+         /internal/ban-user
+
+Storage Layer
+
+MongoDB Atlas (users, tokens)
+
+Communication
+
+Internal microservice communication secured using INTERNAL_SERVICE_SECRET
+
+5. SITREP (TECHNICAL STATUS REPORT)
+Auth Service — Completed & Hardened
+
+Public registration restricted to candidates only
+
+No privileged role can be passed in the body
+
+Internal endpoints added for privileged roles
+
+Internal secret authentication implemented
+
+Full JWT-based authentication operational
+
+Refresh token lifecycle & rotation implemented
+
+Email verification implemented
+
+RBAC middleware implemented
+
+Swagger documentation integrated
+
+MongoDB Atlas connected
+
+Risks Eliminated
+
+Self-assignment of admin roles
+
+Unauthorized recruiter creation
+
+Public privilege escalation attacks
+
+Missing token rotation
+
+Weak verification flows
+
+The system is now secure enough for multi-role integration.
+
+6. COMPLETED COMPONENTS SUMMARY
+6.1 Candidate Registration Flow
+
+Email verification
+
+Password hashing with bcrypt
+
+Default role = candidate
+
+Status = pending → active after verification
+
+6.2 Login + Token Architecture
+
+Access token (short-lived)
+
+Refresh token (stored in DB)
+
+Token rotation
+
+Token revocation
+
+6.3 RBAC Foundation
+
+Role field in User model
+
+Roles: candidate, recruiter, executive, admin
+
+Middleware: restrictTo(…)
+
+6.4 Internal Privileged Registration
+
+Endpoint: /auth/internal/register
+Security: requireInternalSecret
+Roles allowed: recruiter, executive, admin
+
+7. NEXT PHASE: ADMIN SERVICE SPECIFICATION
+
+The Admin Service is the central governance layer of the platform.
+
+Its goals:
+
+Create privileged users (recruiters, executives, admins)
+
+Manage user lifecycle (approve, ban, unban, deactivate)
+
+View and modify roles
+
+Provide system-level visibility & orchestration
+
+Enforce platform governance policies
+
+The Admin Service becomes the “control tower” of the platform.
+
+8. ADMIN SERVICE – ARCHITECTURE PLAN
+8.1 TECH STACK
+
+Node.js + Express
+
+MongoDB (if admin has its own data, optional)
+
+JOI / Zod for validation
+
+Winston / Pino for logging
+
+Swagger for API docs
+
+Axios (or fetch) for internal Auth Service calls
+
+8.2 ADMIN SERVICE DATA FLOW
+Creating a recruiter/admin/executive:
+Admin → Admin Service → Auth Service (/internal/register)
+                                      | (requires internal secret)
+                                      → Creates user with privileged role
+
+Updating a user role:
+Admin → Admin Service → Auth Service (/internal/update-role)
+
+Banning/unbanning:
+Admin → Admin Service → Auth Service (/internal/ban-user)
+
+Fetch users list:
+Admin Service → Auth Service (/internal/users)
+
+8.3 REQUIRED ADMIN SERVICE ENDPOINTS (MVP)
+1. Create Recruiter
+
+POST /admin/recruiters
+
+Validates input
+
+Calls /auth/internal/register
+
+Sends INTERNAL_SERVICE_SECRET
+
+Auto-verifies email
+
+Enforces role = recruiter
+
+2. Create Admin
+
+POST /admin/admins
+
+Enforces role = admin.
+
+3. Create Executive
+
+POST /admin/executives
+
+Role = executive.
+
+4. Get All Users
+
+GET /admin/users
+
+Returns paginated user list (using Auth Service internal endpoint).
+
+5. Update User Role
+
+PATCH /admin/users/:id/role
+
+Allows privilege escalation or demotion.
+
+6. Ban / Unban User
+
+PATCH /admin/users/:id/ban
+PATCH /admin/users/:id/unban
+
+Marks user as banned → prevents login.
+
+7. Get User Details
+
+GET /admin/users/:id
+
+Optional but recommended.
+
+8.4 ADMIN SERVICE FOLDER STRUCTURE
+admin-service/
+  src/
+    config/
+      env.js
+      logger.js
+    routes/
+      adminRoutes.js
+    controllers/
+      adminController.js
+    services/
+      authService.js   // handles internal calls to Auth microservice
+    middleware/
+      authMiddleware.js  // restrictTo('admin')
+    utils/
+    app.js
+    server.js
+  
+  package.json
+  Dockerfile (future)
+  README.md
+
+8.5 STEP-BY-STEP IMPLEMENTATION ROADMAP
+Step 1 — Initialize Admin Service
+
+Node project
+
+Express
+
+Basic routes + Swagger
+
+Step 2 — Implement Admin Authentication
+
+Admins log in using Auth Service.
+Admin Service only authorizes access using JWT + RBAC.
+
+Step 3 — Build Internal AuthService Client
+
+A helper file that:
+
+Adds internal secret header
+
+Calls /auth/internal/register
+
+Calls /auth/internal/update-role
+
+Calls /auth/internal/ban-user
+
+Calls /auth/internal/users
+
+Step 4 — Implement CRUD for Recruiters & Executives
+
+Create recruiter
+
+Create executive
+
+Create admin
+
+Step 5 — Implement User Management
+
+Fetch all users
+
+Change roles
+
+Ban / unban
+
+View user details
+
+Step 6 — Protect All Endpoints (Admin-only)
+
+Using:
+
+JWT auth
+
+restrictTo("admin")
