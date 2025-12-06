@@ -34,7 +34,7 @@ exports.register = async (req, res) => {
             email,
             passwordHash,
             name,
-            role: role || 'candidate',
+            role: 'candidate', // FORCE CANDIDATE ROLE
             emailVerificationToken,
         });
 
@@ -47,6 +47,46 @@ exports.register = async (req, res) => {
         });
     } catch (error) {
         logger.error('Registration Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+exports.internalRegister = async (req, res) => {
+    try {
+        const { email, password, name, role } = req.body;
+
+        // Validate role
+        const allowedRoles = ['recruiter', 'executive', 'admin'];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({ message: 'Invalid role for internal registration' });
+        }
+
+        // Check if user exists
+        const existingUser = await User.findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ message: 'Email already registered' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        // Create user (Auto-verified)
+        const user = await User.create({
+            email,
+            passwordHash,
+            name,
+            role,
+            isEmailVerified: true, // Auto-verify
+            status: 'active',
+        });
+
+        res.status(201).json({
+            message: `Internal registration successful for role: ${role}`,
+            userId: user._id,
+        });
+    } catch (error) {
+        logger.error('Internal Registration Error:', error);
         res.status(500).json({ message: 'Internal Server Error' });
     }
 };

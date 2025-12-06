@@ -12,6 +12,7 @@ const env = {
     JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '15m',
     REFRESH_TOKEN_EXPIRES_IN: process.env.REFRESH_TOKEN_EXPIRES_IN || '7d',
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
+    INTERNAL_SERVICE_SECRET: process.env.INTERNAL_SERVICE_SECRET || 'super-secret-internal-key',
 };
 
 module.exports = env;

@@ -58,7 +58,8 @@ Routes & Controllers (src/routes/ & src/controllers/)
     The API endpoints are defined in authRoutes.js and implemented in authController.js:
 
     Endpoint	Method	Function	Description
-    /register	POST	register    Creates a new user, hashes password, sends mock verification email.
+    /register	POST	register    Creates a new user (Candidate only), hashes password, sends mock verification email.
+    /internal/register POST internalRegister Creates privileged users (Admin, Recruiter). Protected by secret key.
     /login	    POST	login       Validates credentials, returns Access & Refresh tokens.
     /verify-email GET	verifyEmail Verifies user's email using a token.
     /refresh	POST	refreshToken Issues a new Access Token using a valid Refresh Token.
@@ -94,6 +95,34 @@ The service uses Asymmetric Encryption (RS256) for JSON Web Tokens.
 - Benefits:
     - Decouples authentication from verification.
     - Other microservices (e.g., Candidate Service) can validate tokens using the Public Key without needing a direct connection to the Auth Service or sharing a sensitive secret key.
+
+
+####  INTERNAL REGISTRATION FLOW (Privileged) ####
+
+This flow is used by other microservices (like Admin Service) to create Recruiter, Executive, or Admin accounts.
+
+Step 1: The Request
+    The Admin Service sends a POST request to `/api/v1/auth/internal/register`.
+    Headers:
+        `x-internal-secret`: "super-secret-internal-key" (Must match `INTERNAL_SERVICE_SECRET` env var)
+    Body:
+        {
+            "email": "admin@company.com",
+            "password": "strongPassword",
+            "name": "Super Admin",
+            "role": "admin"
+        }
+
+Step 2: Security Check (`requireInternalSecret` Middleware)
+    The middleware checks if the `x-internal-secret` header matches the server's configured secret.
+    - If mismatch: Returns 403 Forbidden.
+    - If match: Proceeds to controller.
+
+Step 3: Controller Logic (`internalRegister`)
+    - Validates that the requested `role` is one of: `['recruiter', 'executive', 'admin']`.
+    - Hashes the password.
+    - Creates the user with `isEmailVerified: true` (Auto-verified).
+    - Returns the new user ID.
 
 
 ####  REGISTRATION DATAFLOW   ####

@@ -29,3 +29,13 @@ exports.restrictTo = (...roles) => {
         next();
     };
 };
+
+exports.requireInternalSecret = (req, res, next) => {
+    const secret = req.headers['x-internal-secret'];
+    const env = require('../config/env');
+
+    if (!secret || secret !== env.INTERNAL_SERVICE_SECRET) {
+        return res.status(403).json({ message: 'Forbidden: Invalid internal secret' });
+    }
+    next();
+};
