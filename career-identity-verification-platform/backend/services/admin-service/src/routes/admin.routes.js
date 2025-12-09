@@ -24,6 +24,7 @@ router.post('/recruiters',
 
 router.get('/recruiters/pending', adminController.listPendingRecruiters);
 
+// New Approval Route
 router.patch('/recruiters/:id/approve', adminController.approveRecruiter);
 
 

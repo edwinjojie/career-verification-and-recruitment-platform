@@ -1,29 +1,40 @@
 const Response = require('../utils/response');
-const authInternalClient = require('../services/authInternalClient');
+const adminService = require('../services/adminService');
+const { extractAdminContext } = require('../utils/adminContext');
 
 async function createRecruiter(req, res, next) {
     try {
-        const result = await authInternalClient.createRecruiterInternal(req.body, req.requestId);
-        Response.success(res, result.data, 'Recruiter Created via Auth Service');
+        const context = extractAdminContext(req);
+        const result = await adminService.createRecruiter(req.body, context);
+        Response.success(res, result, 'Recruiter Created Successfully');
     } catch (error) {
         next(error);
     }
 }
 
 async function listPendingRecruiters(req, res, next) {
-    // Stub
-    Response.success(res, { stub: 'listPendingRecruiters' }, 'Stub: List Pending');
+    // Note: Assuming listRecruiters logic or simple database query
+    const RecruiterApproval = require('../models/RecruiterApproval.model');
+    const pending = await RecruiterApproval.find({ status: 'pending' });
+    Response.success(res, pending, 'Pending Recruiters List');
 }
 
 async function approveRecruiter(req, res, next) {
-    // Stub
-    Response.success(res, { stub: 'approveRecruiter' }, 'Stub: Recruiter Approved');
+    try {
+        const context = extractAdminContext(req);
+        const { id } = req.params;
+        const result = await adminService.approveRecruiter(id, context);
+        Response.success(res, result, 'Recruiter Approved');
+    } catch (error) {
+        next(error);
+    }
 }
 
 async function createAdmin(req, res, next) {
     try {
-        const result = await authInternalClient.createAdminInternal(req.body, req.requestId);
-        Response.success(res, result.data, 'Admin Created via Auth Service');
+        const context = extractAdminContext(req);
+        const result = await adminService.createAdmin(req.body, context);
+        Response.success(res, result, 'Admin Created Successfully');
     } catch (error) {
         next(error);
     }
@@ -31,8 +42,9 @@ async function createAdmin(req, res, next) {
 
 async function listUsers(req, res, next) {
     try {
-        const result = await authInternalClient.fetchAllUsers(req.requestId);
-        Response.success(res, result.data, 'Users Fetched from Auth Service');
+        const context = extractAdminContext(req);
+        const result = await adminService.listUsers(req.query, context);
+        Response.success(res, result, 'Users List');
     } catch (error) {
         next(error);
     }
@@ -40,10 +52,11 @@ async function listUsers(req, res, next) {
 
 async function updateRole(req, res, next) {
     try {
+        const context = extractAdminContext(req);
         const { id } = req.params;
         const { newRole } = req.body;
-        const result = await authInternalClient.updateUserRole(id, newRole, req.requestId);
-        Response.success(res, result.data, 'User Role Updated via Auth Service');
+        const result = await adminService.updateRole(id, newRole, context);
+        Response.success(res, result, 'User Role Updated');
     } catch (error) {
         next(error);
     }
@@ -51,17 +64,24 @@ async function updateRole(req, res, next) {
 
 async function banUser(req, res, next) {
     try {
+        const context = extractAdminContext(req);
         const { id } = req.params;
         const { reason, duration } = req.body;
-        const result = await authInternalClient.banUser(id, reason, duration, req.requestId);
-        Response.success(res, result.data, 'User Banned via Auth Service');
+        const result = await adminService.banUser(id, reason, duration, context);
+        Response.success(res, result, 'User Banned');
     } catch (error) {
         next(error);
     }
 }
 
 async function listAuditLogs(req, res, next) {
-    Response.success(res, { stub: 'listAuditLogs' }, 'Stub: Audit Logs');
+    try {
+        const context = extractAdminContext(req);
+        const result = await adminService.listAuditLogs(req.query, context);
+        Response.success(res, result, 'Audit Logs');
+    } catch (error) {
+        next(error);
+    }
 }
 
 module.exports = {
