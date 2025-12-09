@@ -24,7 +24,8 @@ const env = {
     NODE_ENV: process.env.NODE_ENV,
     MONGO_URI: process.env.MONGO_URI,
     INTERNAL_SERVICE_SECRET: process.env.INTERNAL_SERVICE_SECRET,
-    AUTH_SERVICE_BASE_URL: process.env.AUTH_SERVICE_BASE_URL,
+    AUTH_SERVICE_BASE_URL: process.env.AUTH_SERVICE_BASE_URL || 'http://localhost:4001',
+    AUTH_INTERNAL_TIMEOUT_MS: parseInt(process.env.AUTH_INTERNAL_TIMEOUT_MS, 10) || 3000,
     JWT_PUBLIC_KEY_PATH: process.env.JWT_PUBLIC_KEY_PATH,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info'
 };

@@ -1,11 +1,18 @@
 const env = require('../config/env');
 
 const formatMessage = (level, message, meta = {}) => {
+    // Basic Redaction
+    if (meta.password) meta.password = '[REDACTED]';
+    if (meta.secret) meta.secret = '[REDACTED]';
+    if (meta.token) meta.token = '[REDACTED]';
+    if (meta.internalServiceSecret) meta.internalServiceSecret = '[REDACTED]';
+
     return JSON.stringify({
         timestamp: new Date().toISOString(),
         level,
         service: 'admin-service',
         message,
+        correlationId: meta.requestId || meta.correlationId || 'system',
         ...meta
     });
 };
