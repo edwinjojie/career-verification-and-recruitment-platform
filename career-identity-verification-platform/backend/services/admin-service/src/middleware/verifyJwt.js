@@ -1,46 +1,56 @@
-/**
- * JWT Verification Middleware Design Spec
- * =======================================
- * 
- * Purpose: Authenticate requests by validating RS256 JWT Access Tokens.
- * 
- * Behavior
- * --------
- * 1. Configuration:
- *    - Load Public Key from file path defined in process.env.JWT_PUBLIC_KEY_PATH.
- *    - Algorithm: RS256
- * 
- * 2. Extraction:
- *    - Parse header `Authorization: Bearer <token>`.
- *    - If missing or malformed -> Return 401 Unauthorized.
- * 
- * 3. Validation:
- *    - Use jsonwebtoken.verify(token, publicKey).
- *    - Check expiration (exp).
- *    - Check issuer/audience if configured.
- * 
- * 4. Success:
- *    - Attach decoded payload to `req.user`.
- *    - Payload Object structure:
- *      {
- *        userId: string (sub),
- *        email: string,
- *        role: string,
- *        tenantId: string (optional),
- *        iat: number,
- *        exp: number
- *      }
- *    - Call `next()`.
- * 
- * 5. Failure:
- *    - TokenExpired -> 401 "Token expired"
- *    - JsonWebTokenError -> 401 "Invalid token"
- * 
- * Unit Test Scenarios
- * -------------------
- * - No header -> 401
- * - Invalid header format -> 401
- * - Expired token -> 401
- * - Wrong signature (different private key) -> 401
- * - Valid token -> req.user is populated, next() called.
- */
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+const env = require('../config/env');
+const logger = require('../utils/logger');
+
+// Load Public Key
+let publicKey;
+try {
+    // Resolve path relative to CWD or absolute
+    const keyPath = path.isAbsolute(env.JWT_PUBLIC_KEY_PATH)
+        ? env.JWT_PUBLIC_KEY_PATH
+        : path.resolve(process.cwd(), env.JWT_PUBLIC_KEY_PATH);
+
+    publicKey = fs.readFileSync(keyPath, 'utf8');
+} catch (error) {
+    logger.error('Failed to load JWT Public Key', { error: error.message });
+    process.exit(1); // Fatal error
+}
+
+const verifyJwt = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({
+            success: false,
+            error: {
+                code: 'UNAUTHORIZED',
+                message: 'Missing or invalid Authorization header'
+            }
+        });
+    }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+        const decoded = jwt.verify(token, publicKey, { algorithms: ['RS256'] });
+        req.user = decoded; // Attach user to request
+        next();
+    } catch (error) {
+        logger.warn('JWT Verification Failed', {
+            requestId: req.requestId,
+            error: error.message
+        });
+
+        return res.status(401).json({
+            success: false,
+            error: {
+                code: 'UNAUTHORIZED',
+                message: 'Invalid or expired token'
+            }
+        });
+    }
+};
+
+module.exports = verifyJwt;
