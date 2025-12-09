@@ -1,9 +1,9 @@
 /**
- * Auth Internal Client Design Spec
- * =================================
+ * Auth Internal Client Design Spec (Updated)
+ * ==========================================
  * 
  * Purpose: This client manages reliable communication with the Auth Service's internal API.
- * It handles request construction, headers, error mapping, and retry logic.
+ * It handles request construction, headers, error mapping, retry logic, and circuit breaking.
  * 
  * Configuration
  * -------------
@@ -11,71 +11,51 @@
  * - Secret: process.env.INTERNAL_SERVICE_SECRET (Header: x-internal-secret)
  * - Timeout: 5000ms (5 seconds)
  * 
- * Retry Logic
- * -----------
- * - Strategy: Exponential Backoff (e.g., 500ms, 1000ms, 2000ms)
- * - Max Attempts: 3
- * - Conditions:
- *   - Network errors (ECONNRESET, ETIMEDOUT)
- *   - status >= 500 (Internal Server Error)
+ * Resiliency Strategy
+ * -------------------
+ * 
+ * 1. Retry Policy (Network & 5xx Errors)
+ *    - Strategy: Exponential Backoff
+ *    - Base Delay: 300ms
+ *    - Multiplier: 2.0
+ *    - Max Attempts: 3
+ *    - Conditions: Connection Refused, Timeout, HTTP 500, 502, 503, 504.
+ *    - Library: `axios-retry` or custom interceptor.
+ * 
+ * 2. Circuit Breaker (Protecting the Admin Service)
+ *    - Threshold: 5 consecutive failures (failures = timeouts or 5xx).
+ *    - State: OPEN
+ *    - Reset Timeout: 60 seconds.
+ *    - Behavior when OPEN: Immediately return 503 "Service Unavailable - Circuit Open" without calling Auth Service.
+ *    - Library: `opossum` or `brakes`.
+ * 
+ * 3. Fallbacks (Degraded Mode)
+ *    - Non-critical reads (e.g., listUsers) could return empty list or cached data (if caching implemented).
+ *    - Critical writes (createRecruiter) must fail fast.
  * 
  * Functions & Contracts
  * ---------------------
  * 
  * 1. createUserInternal(payload)
- *    - Purpose: Create privileged users (recruiter, admin, executive)
  *    - Method: POST /internal/register
- *    - Request Payload:
- *      {
- *        name: string,
- *        email: string,
- *        password: string,
- *        role: 'recruiter' | 'admin' | 'executive',
- *        isEmailVerified: boolean (true),
- *        status: 'active',
- *        tenantId: string (optional)
- *      }
- *    - Success Response (200/201):
- *      {
- *        success: true,
- *        data: { userId: string, ...userFields }
- *      }
  * 
  * 2. updateUserRoleInternal(userId, role)
- *    - Purpose: Change a user's role
  *    - Method: PATCH /internal/update-role
- *    - Request Payload: { userId: string, role: string }
- *    - Success Response (200): { success: true, message: 'Role updated' }
  * 
  * 3. banUserInternal(userId, reason)
- *    - Purpose: Ban a user
  *    - Method: PATCH /internal/ban-user
- *    - Request Payload: { userId: string, reason: string }
- *    - Success Response (200): { success: true, message: 'User banned' }
  * 
  * 4. listUsersInternal(query)
- *    - Purpose: Fetch paginated users
  *    - Method: GET /internal/users
- *    - Query Params: page, limit, role, status, search
- *    - Success Response (200):
- *      {
- *        success: true,
- *        count: number,
- *        pagination: { ... },
- *        data: [ ...users ]
- *      }
  * 
  * 5. getUserInternal(userId)
- *    - Purpose: Get single user details
  *    - Method: GET /internal/users/:id
- *    - Success Response (200): { success: true, data: { ...user } }
  * 
  * Error Mapping
  * -------------
- * - 400 Bad Request: Throw Validation Error
- * - 401 Unauthorized: Throw Auth Error (Invalid Secret) - Log Critical Alert
- * - 403 Forbidden: Throw Auth Error (Role mismatch)
- * - 404 Not Found: Throw NotFound Error
- * - 409 Conflict: Throw Conflict Error (e.g., "Email already exists")
- * - 5xx Server Error: Trigger Retry Logic -> Throw UpstreamServiceError if exhausted
+ * - 400: Validation Error
+ * - 401/403: Security Config Error (Critical)
+ * - 404: NotFound
+ * - 409: Conflict
+ * - 5xx/Timeout: Retry -> Circuit Breaker -> UpstreamServiceError
  */

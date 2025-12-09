@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  # Shared Database for Dev
+  mongo:
+    image: mongo:6.0
+    container_name: civ_mongo_dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - civ_network
+
+  # Auth Service (Dependency)
+  auth-service:
+    build:
+      context: ../auth-service # Assumes sibling directory
+      dockerfile: Dockerfile
+    container_name: civ_auth_service
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - MONGO_URI=mongodb://mongo:27017/auth-service
+      - INTERNAL_SERVICE_SECRET=dev_secret_123
+      - JWT_SECRET=dev_jwt_secret
+    volumes:
+      - ../../secrets:/app/secrets:ro # Mount keys
+    depends_on:
+      - mongo
+    networks:
+      - civ_network
+
+  # Admin Service (Target)
+  admin-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: civ_admin_service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - MONGO_URI=mongodb://mongo:27017/admin-service
+      - AUTH_SERVICE_BASE_URL=http://auth-service:3002/api/v1/auth
+      - INTERNAL_SERVICE_SECRET=dev_secret_123
+      - JWT_PUBLIC_KEY_PATH=/app/secrets/jwt_public.pem
+    volumes:
+      - ../../secrets:/app/secrets:ro # Mount keys for verification
+      - ./src:/app/src # Hot reload if using nodemon
+    depends_on:
+      - mongo
+      - auth-service
+    networks:
+      - civ_network
+
+networks:
+  civ_network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+
+# Dev Tips:
+# 1. Ensure 'secrets' folder exists at repo root with 'jwt_public.pem'.
+# 2. INTERNAL_SERVICE_SECRET must match in both services.
+# 3. Run: docker-compose -f docker-compose.admin.yml up --build
