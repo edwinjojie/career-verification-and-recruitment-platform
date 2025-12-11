@@ -1,0 +1,125 @@
+SITREP: Pre-Flight Prerequisites Check
+DATE: 2025-12-10
+
+1. PREREQUISITES FOR AUTH SERVICE
+
+Make sure your Auth Service is fully operational because Admin Service depends on it for:
+- Creating recruiter/admin/internal users
+- Updating roles
+- Banning users
+- Fetching all users
+- Internal health checks
+
+Checklist for Auth Service:
+
+A. Infrastructure & Environment
+[x] Node.js installed
+[x] Auth Service runs without crash (npm start or nodemon)
+[x] .env file configured with:
+    - PORT
+    - MONGO_URI
+    - JWT_PRIVATE_KEY_PATH
+    - JWT_PUBLIC_KEY_PATH
+    - INTERNAL_SERVICE_SECRET
+    - CORS_ORIGIN (optional for local)
+    - Any mail/verification settings if applicable
+
+B. Authentication Features
+[x] Public registration always forces role: candidate
+[x] Internal registration (POST /internal/register) working with:
+    - Correct x-internal-secret
+    - Auto-verified user
+    - Auto-active status
+
+C. Internal Routes Confirmed
+Auth Service must expose:
+[x] POST /internal/register
+[x] GET /internal/users
+[x] PATCH /internal/users/:id/role
+[x] PATCH /internal/users/:id/ban
+[x] GET /internal/health
+
+D. JWT / RS256 Prerequisites
+[x] Private/public RSA key pair generated
+[x] Public key readable by Admin Service
+[x] Token issuance working with RS256
+
+E. MongoDB
+[x] Database connection stable
+[x] Users collection accessible
+[x] No schema conflicts
+
+2. PREREQUISITES FOR ADMIN SERVICE
+
+Admin Service must be fully ready to receive Swagger UI and run testable endpoints.
+
+A. Infrastructure & Environment
+Your Admin Service requires:
+[ ] .env configured with:
+    - PORT
+    - MONGO_URI
+    - JWT_PUBLIC_KEY_PATH
+    - AUTH_SERVICE_BASE_URL
+    - INTERNAL_SERVICE_SECRET
+    - AUTH_INTERNAL_TIMEOUT_MS (optional)
+[ ] Ensure public key is readable.
+[ ] Ensure Admin Service can reach Auth Service via local network.
+
+B. Server + Middleware Layer
+Ensure these files are present and implemented:
+[x] src/app.js
+[x] src/server.js
+[x] src/routes/index.js
+[x] src/middleware/verifyJwt.js
+[x] src/middleware/requireAdmin.js
+[x] src/middleware/validateRequest.js
+[x] src/middleware/errorHandler.js
+[x] src/utils/logger.js (Note: logger is in utils/logger.js or middleware/requestLogger.js?) -> Checked: utils/logger.js exists.
+
+C. Internal Client Layer
+Ensure:
+[x] authInternalClient.js functional
+[x] Circuit breaker implemented
+[x] Retry logic implemented
+[x] Base URL correctly pointing to Auth Service
+[x] x-internal-secret set from env
+
+D. Core Business Logic
+Ensure:
+[x] adminService.js implemented
+[x] Controllers wired into routes
+[x] Audit model implemented
+[x] Recruiter approval model implemented
+[x] No missing await anywhere in controllers/services
+
+E. Database
+Ensure Admin Service connects to MongoDB and all models exist:
+[x] AdminAction.model.js
+[x] RecruiterApproval.model.js
+
+
+3. RUNTIME PREREQUISITES
+
+You must confirm the following before testing with Swagger:
+
+A. Both services running
+[ ] Auth Service running at http://localhost:<AUTH_PORT>
+[ ] Admin Service running at http://localhost:<ADMIN_PORT>
+
+B. Network connectivity
+[ ] Admin Service can reach Auth Service:
+    GET  http://auth-service-host:auth-port/internal/health
+    This must return 200.
+
+C. You possess a valid Admin JWT
+Testing Admin endpoints requires:
+[ ] You created an admin user via internal register
+[ ] You logged in via Auth Service /login
+[ ] You have a JWT with "role": "admin"
+
+D. Clean startup logs
+Both services must show:
+[ ] MongoDB connected
+[ ] No warnings about missing environment variables
+[ ] No undefined routes
+[ ] No failing health checks

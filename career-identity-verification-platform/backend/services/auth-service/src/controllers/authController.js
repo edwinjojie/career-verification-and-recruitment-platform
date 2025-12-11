@@ -231,6 +231,7 @@ exports.logout = async (req, res) => {
     }
 };
 
+
 exports.getMe = async (req, res) => {
     try {
         const user = await User.findById(req.user.sub).select('-passwordHash');
@@ -243,3 +244,89 @@ exports.getMe = async (req, res) => {
         res.status(500).json({ message: 'Internal Server Error' });
     }
 };
+
+// --- Internal Endpoints (Protected by Secret) ---
+
+exports.internalGetUsers = async (req, res) => {
+    try {
+        // Basic pagination (optional, but good practice)
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        const users = await User.find()
+            .select('-passwordHash')
+            .skip(skip)
+            .limit(limit)
+            .sort({ createdAt: -1 });
+
+        const total = await User.countDocuments();
+
+        res.status(200).json({
+            users,
+            pagination: {
+                page,
+                limit,
+                total,
+                pages: Math.ceil(total / limit)
+            }
+        });
+    } catch (error) {
+        logger.error('Internal Get Users Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+exports.internalUpdateUserRole = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { role } = req.body;
+
+        if (!['candidate', 'recruiter', 'executive', 'admin'].includes(role)) {
+            return res.status(400).json({ message: 'Invalid role' });
+        }
+
+        const user = await User.findByIdAndUpdate(id, { role }, { new: true }).select('-passwordHash');
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        res.status(200).json({ message: 'User role updated', user });
+    } catch (error) {
+        logger.error('Internal Update Role Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+exports.internalBanUser = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { reason } = req.body; // Reason can be logged or stored if we extend schema
+
+        // Update status to 'suspended' (equivalent to ban)
+        const user = await User.findByIdAndUpdate(id, { status: 'suspended' }, { new: true }).select('-passwordHash');
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        logger.info(`User ${id} suspended (banned). Reason: ${reason || 'No reason provided'}`);
+
+        res.status(200).json({ message: 'User has been banned/suspended', user });
+    } catch (error) {
+        logger.error('Internal Ban User Error:', error);
+        res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+exports.internalHealth = async (req, res) => {
+    // Deep health check (e.g. check DB connection)
+    try {
+        // Check DB
+        await User.findOne().select('_id');
+        res.status(200).json({ status: 'healthy', database: 'connected' });
+    } catch (error) {
+        res.status(503).json({ status: 'unhealthy', database: 'disconnected' });
+    }
+};
+
