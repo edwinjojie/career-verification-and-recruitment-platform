@@ -1,0 +1,420 @@
+openapi: 3.0.0
+info:
+  title: Candidate Service API
+  description: Career Management Microservice for Career Identity Verification Platform
+  version: 1.0.0
+servers:
+  - url: http://localhost:3004/api/v1
+    description: Local Development Server
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Profile:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        headline:
+          type: string
+        summary:
+          type: string
+        location:
+          type: object
+          properties:
+            city:
+              type: string
+            state:
+              type: string
+            country:
+              type: string
+        preferences:
+          type: object
+          properties:
+            desiredRole:
+              type: string
+            desiredLocation:
+              type: string
+            workType:
+              type: string
+              enum: [remote, hybrid, onsite]
+            salaryRange:
+              type: object
+              properties:
+                min:
+                  type: number
+                max:
+                  type: number
+                currency:
+                  type: string
+    Education:
+      type: object
+      properties:
+        degree:
+          type: string
+        fieldOfStudy:
+          type: string
+        institution:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        grade:
+          type: string
+        description:
+          type: string
+    Experience:
+      type: object
+      properties:
+        company:
+          type: string
+        title:
+          type: string
+        employmentType:
+          type: string
+          enum: [full-time, part-time, contract, internship, freelance]
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+        description:
+          type: string
+        isCurrentRole:
+          type: boolean
+    Skill:
+      type: object
+      properties:
+        skillName:
+          type: string
+        proficiencyLevel:
+          type: string
+          enum: [beginner, intermediate, advanced, expert]
+        yearsOfExperience:
+          type: number
+        isPrimary:
+          type: boolean
+    Certification:
+      type: object
+      properties:
+        name:
+          type: string
+        issuingOrganization:
+          type: string
+        issueDate:
+          type: string
+          format: date
+        expiryDate:
+          type: string
+          format: date
+        credentialId:
+          type: string
+        credentialUrl:
+          type: string
+    Document:
+      type: object
+      properties:
+        documentType:
+          type: string
+          enum: [resume, certificate, id_proof, portfolio]
+        fileName:
+          type: string
+        fileSize:
+          type: number
+        mimeType:
+          type: string
+        storageUrl:
+          type: string
+paths:
+  /candidate/profile/init:
+    post:
+      summary: Initialize candidate profile
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Profile initialized
+        '200':
+          description: Profile already exists
+  /candidate/profile:
+    get:
+      summary: Get full candidate profile
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Full profile data
+    patch:
+      summary: Update candidate profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Profile'
+      responses:
+        '200':
+          description: Profile updated
+  /candidate/profile/status:
+    get:
+      summary: Get profile completion status
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Completion status and score
+  /candidate/profile/complete:
+    post:
+      summary: Mark profile as complete
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Profile marked complete
+        '400':
+          description: Profile incomplete
+  /candidate/education:
+    post:
+      summary: Add education
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Education'
+      responses:
+        '201':
+          description: Education added
+  /candidate/education/{id}:
+    patch:
+      summary: Update education
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Education'
+      responses:
+        '200':
+          description: Education updated
+    delete:
+      summary: Delete education
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Education deleted
+  /candidate/experience:
+    post:
+      summary: Add experience
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Experience'
+      responses:
+        '201':
+          description: Experience added
+  /candidate/experience/{id}:
+    patch:
+      summary: Update experience
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Experience'
+      responses:
+        '200':
+          description: Experience updated
+    delete:
+      summary: Delete experience
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Experience deleted
+  /candidate/skills:
+    post:
+      summary: Add skill
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Skill'
+      responses:
+        '201':
+          description: Skill added
+  /candidate/skills/{id}:
+    delete:
+      summary: Remove skill
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Skill removed
+  /candidate/certifications:
+    post:
+      summary: Add certification
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Certification'
+      responses:
+        '201':
+          description: Certification added
+  /candidate/certifications/{id}:
+    delete:
+      summary: Remove certification
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certification removed
+  /candidate/documents:
+    get:
+      summary: List documents
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: documentType
+          schema:
+            type: string
+            enum: [resume, certificate, id_proof, portfolio]
+      responses:
+        '200':
+          description: List of documents
+    post:
+      summary: Upload document metadata
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Document'
+      responses:
+        '201':
+          description: Document uploaded
+  /candidate/documents/{id}:
+    delete:
+      summary: Delete document
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Document deleted
+  /candidate/applications:
+    get:
+      summary: List applications
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of applications
+    post:
+      summary: Submit application
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jobId:
+                  type: string
+                coverLetter:
+                  type: string
+                resumeDocumentId:
+                  type: string
+      responses:
+        '201':
+          description: Application submitted
+  /candidate/applications/{id}:
+    get:
+      summary: Get application details
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Application details
+  /candidate/activity:
+    get:
+      summary: List activity logs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Activity history
