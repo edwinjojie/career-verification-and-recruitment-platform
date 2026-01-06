@@ -1,0 +1,494 @@
+Candidate Service Implementation Plan
+Complete implementation of the Candidate Service microservice for the Career Identity Verification & Recruitment Platform. This service manages all career-related data and actions performed by candidates after authentication.
+
+User Review Required
+IMPORTANT
+
+Architecture Alignment: This service follows the exact patterns established in the Admin Service and Auth Service (Node.js, Express, MongoDB, Mongoose, JWT RS256, Winston logging).
+
+IMPORTANT
+
+Data Isolation: All endpoints enforce strict data isolation - candidates can only access their own records via authUserId from JWT.
+
+NOTE
+
+No Breaking Changes: This is a new service with no dependencies on existing services except JWT verification via shared public key.
+
+Proposed Changes
+Foundation & Configuration
+[NEW] 
+package.json
+Node.js project configuration with dependencies matching admin-service pattern:
+
+Core: express, mongoose, dotenv
+Security: helmet, cors, jsonwebtoken
+Validation: joi
+Logging: winston
+Dev Tools: nodemon, jest, supertest, eslint
+[NEW] 
+.env.example
+Environment configuration template:
+
+PORT=3004
+NODE_ENV=development
+MONGO_URI=mongodb://localhost:27017/candidate-service
+JWT_PUBLIC_KEY_PATH=../../secrets/jwt_public.pem
+LOG_LEVEL=info
+[NEW] 
+src/server.js
+Server entry point with MongoDB connection and graceful shutdown handling (matches admin-service pattern).
+
+[NEW] 
+src/app.js
+Express app setup with security middleware (helmet, cors), body parsing, request logging, and error handling.
+
+Configuration & Utilities
+[NEW] 
+src/config/env.js
+Environment variable loader with validation.
+
+[NEW] 
+src/utils/logger.js
+Winston logger configuration for structured logging.
+
+[NEW] 
+src/errors/AppError.js
+Custom error class for consistent error handling.
+
+Middleware
+[NEW] 
+src/middleware/verifyJwt.js
+JWT verification middleware using RS256 algorithm with public key. Attaches decoded user to req.user.
+
+[NEW] 
+src/middleware/requireCandidate.js
+Role-based access control ensuring only users with candidate role can access endpoints.
+
+[NEW] 
+src/middleware/errorHandler.js
+Global error handler with standardized error response format.
+
+[NEW] 
+src/middleware/requestLogger.js
+Request logging middleware with unique request IDs.
+
+[NEW] 
+src/middleware/validateRequest.js
+Joi schema validation middleware for request body/query validation.
+
+Data Models (Mongoose Schemas)
+[NEW] 
+src/models/CandidateProfile.model.js
+Core candidate profile schema:
+
+authUserId (String, unique, indexed) - Link to Auth Service user
+firstName, lastName (String)
+phone (String, optional)
+location (Object: city, state, country)
+headline (String, max 100 chars)
+summary (String, max 1000 chars)
+preferences (Object: desiredRole, desiredLocation, salaryRange, workType)
+profileCompletionScore (Number, system-managed)
+isProfileComplete (Boolean, system-managed)
+Timestamps (createdAt, updatedAt)
+Indexes: authUserId (unique), isProfileComplete
+
+[NEW] 
+src/models/Education.model.js
+Education entries schema:
+
+candidateId (String, indexed) - References authUserId
+degree (String, required)
+fieldOfStudy (String)
+institution (String, required)
+startDate (Date)
+endDate (Date, nullable for current)
+grade (String)
+description (String, max 500 chars)
+isVerified (Boolean, default false) - Future verification support
+isDeleted (Boolean, default false) - Soft delete
+Timestamps
+Indexes: candidateId, compound 
+(candidateId, isDeleted)
+
+[NEW] 
+src/models/Experience.model.js
+Work experience schema:
+
+candidateId (String, indexed)
+company (String, required)
+title (String, required)
+employmentType (String, enum: full-time/part-time/contract/internship)
+location (String)
+startDate (Date, required)
+endDate (Date, nullable)
+description (String, max 2000 chars)
+isCurrentRole (Boolean) - Convenience field
+isDeleted (Boolean, default false)
+Timestamps
+Indexes: candidateId, compound 
+(candidateId, isDeleted)
+
+[NEW] 
+src/models/Skill.model.js
+Skills schema:
+
+candidateId (String, indexed)
+skillName (String, required)
+proficiencyLevel (String, enum: beginner/intermediate/advanced/expert)
+yearsOfExperience (Number)
+isPrimary (Boolean, default false) - Top skills for ranking
+Timestamps
+Indexes: candidateId, compound 
+(candidateId, skillName)
+ for uniqueness
+
+[NEW] 
+src/models/Certification.model.js
+Certifications schema:
+
+candidateId (String, indexed)
+name (String, required)
+issuingOrganization (String, required)
+issueDate (Date)
+expiryDate (Date, nullable)
+credentialId (String)
+credentialUrl (String)
+isDeleted (Boolean, default false)
+Timestamps
+Indexes: candidateId, compound 
+(candidateId, isDeleted)
+
+[NEW] 
+src/models/Document.model.js
+Document metadata schema:
+
+candidateId (String, indexed)
+documentType (String, enum: resume/certificate/id_proof/portfolio, required)
+fileName (String, required)
+fileSize (Number)
+mimeType (String)
+storageUrl (String) - Placeholder for now, S3 URL later
+uploadedAt (Date, default now)
+uploadedBy (String, default 'candidate')
+verificationStatus (String, enum: pending/verified/rejected, default pending)
+rejectionReason (String, nullable)
+isDeleted (Boolean, default false)
+Timestamps
+Indexes: candidateId, compound 
+(candidateId, documentType, isDeleted)
+
+[NEW] 
+src/models/Application.model.js
+Job application schema:
+
+candidateId (String, indexed)
+jobId (String, required) - Opaque string for now
+appliedAt (Date, default now, immutable)
+status (String, enum: submitted/under_review/shortlisted/rejected/accepted, default submitted)
+snapshot (Object, immutable) - Profile, education, experience, skills at application time
+coverLetter (String, max 2000 chars)
+resumeDocumentId (String) - Reference to Document
+Timestamps
+Indexes: candidateId, jobId, unique compound 
+(candidateId, jobId)
+ for duplicate prevention
+
+[NEW] 
+src/models/ActivityLog.model.js
+Activity audit log schema:
+
+candidateId (String, indexed)
+eventType (String, enum: profile_updated/document_uploaded/application_submitted/profile_completed/education_added/etc.)
+metadata (Mixed, flexible)
+source (String, enum: user/system/admin)
+ipAddress (String)
+userAgent (String)
+timestamp (Date, default now, immutable)
+Indexes: compound 
+(candidateId, timestamp desc)
+ for efficient queries
+
+Business Logic Services
+[NEW] 
+src/services/profileCompletionService.js
+Profile completion calculator:
+
+Calculates completion score based on:
+Profile summary ≥ 50 chars (20%)
+At least 1 education (20%)
+At least 1 experience (20%)
+At least 3 skills (20%)
+At least 1 resume uploaded (10%)
+Preferences filled (10%)
+Returns { score: Number, isComplete: Boolean, missingFields: Array }
+Used by profile update endpoints to auto-update completion status
+[NEW] 
+src/services/snapshotService.js
+Application snapshot builder:
+
+Fetches current profile, education, experience, skills
+Creates immutable snapshot object for application
+Includes resume metadata
+Returns structured snapshot for Application model
+[NEW] 
+src/services/activityLogService.js
+Activity logging helper:
+
+Centralized function to log candidate activities
+Extracts IP and user agent from request
+Creates ActivityLog entries with consistent format
+Validation Schemas (Joi)
+[NEW] 
+src/validators/profile.validator.js
+Joi schemas for profile operations:
+
+updateProfileSchema: firstName, lastName, phone, location, headline (max 100), summary (max 1000), preferences
+[NEW] 
+src/validators/education.validator.js
+Joi schemas for education operations:
+
+addEducationSchema: degree (required), fieldOfStudy, institution (required), dates, grade, description (max 500)
+updateEducationSchema: Same fields, all optional
+[NEW] 
+src/validators/experience.validator.js
+Joi schemas for experience operations:
+
+addExperienceSchema: company (required), title (required), employmentType, location, dates, description (max 2000)
+updateExperienceSchema: Same fields, all optional
+Date validation: endDate must be after startDate
+[NEW] 
+src/validators/skill.validator.js
+Joi schemas for skill operations:
+
+addSkillSchema: skillName (required), proficiencyLevel (enum), yearsOfExperience, isPrimary
+[NEW] 
+src/validators/certification.validator.js
+Joi schemas for certification operations:
+
+addCertificationSchema: name (required), issuingOrganization (required), dates, credentialId, credentialUrl
+[NEW] 
+src/validators/document.validator.js
+Joi schemas for document operations:
+
+uploadDocumentSchema: documentType (enum), fileName (required), fileSize, mimeType, storageUrl
+[NEW] 
+src/validators/application.validator.js
+Joi schemas for application operations:
+
+submitApplicationSchema: jobId (required), coverLetter (max 2000), resumeDocumentId
+Controllers (Business Logic)
+[NEW] 
+src/controllers/profileController.js
+Profile management endpoints:
+
+initProfile: POST - Create/initialize profile (idempotent)
+getProfile: GET - Fetch full profile with education, experience, skills, certifications, documents
+updateProfile: PATCH - Update editable profile fields, recalculate completion
+getProfileStatus: GET - Get completion status and missing fields
+markProfileComplete: POST - Validate and mark profile as complete (if criteria met)
+deactivateProfile: POST - Soft deactivate profile
+[NEW] 
+src/controllers/educationController.js
+Education management endpoints:
+
+addEducation: POST - Add education entry
+updateEducation: PATCH - Update education entry by ID
+deleteEducation: DELETE - Soft delete education entry
+[NEW] 
+src/controllers/experienceController.js
+Experience management endpoints:
+
+addExperience: POST - Add work experience
+updateExperience: PATCH - Update experience by ID
+deleteExperience: DELETE - Soft delete experience
+[NEW] 
+src/controllers/skillController.js
+Skills management endpoints:
+
+addSkill: POST - Add skill
+removeSkill: DELETE - Remove skill by ID
+[NEW] 
+src/controllers/certificationController.js
+Certifications management endpoints:
+
+addCertification: POST - Add certification
+removeCertification: DELETE - Soft delete certification
+[NEW] 
+src/controllers/documentController.js
+Document management endpoints:
+
+uploadDocument: POST - Upload document metadata
+listDocuments: GET - List all documents (non-deleted)
+deleteDocument: DELETE - Soft delete document
+[NEW] 
+src/controllers/applicationController.js
+Application management endpoints:
+
+submitApplication: POST - Submit job application with snapshot, prevent duplicates
+listApplications: GET - List candidate's applications with pagination
+getApplicationDetails: GET - Get single application by ID
+[NEW] 
+src/controllers/activityController.js
+Activity log endpoints:
+
+listActivity: GET - List activity history with pagination and filtering
+[NEW] 
+src/controllers/adminController.js
+Internal admin endpoints (protected):
+
+adminGetCandidateProfile: GET - Fetch any candidate profile by ID
+adminVerifyDocument: PATCH - Verify/reject candidate document
+Routes (API Endpoints)
+[NEW] 
+src/routes/profile.routes.js
+Profile routes (/api/v1/candidate/profile):
+
+POST /init - Initialize profile
+GET / - Get profile
+PATCH / - Update profile
+GET /status - Get completion status
+POST /complete - Mark complete
+POST /deactivate - Deactivate profile
+All routes protected with 
+verifyJwt
+ + requireCandidate middleware.
+
+[NEW] 
+src/routes/education.routes.js
+Education routes (/api/v1/candidate/education):
+
+POST / - Add education
+PATCH /:educationId - Update education
+DELETE /:educationId - Delete education
+[NEW] 
+src/routes/experience.routes.js
+Experience routes (/api/v1/candidate/experience):
+
+POST / - Add experience
+PATCH /:experienceId - Update experience
+DELETE /:experienceId - Delete experience
+[NEW] 
+src/routes/skill.routes.js
+Skills routes (/api/v1/candidate/skills):
+
+POST / - Add skill
+DELETE /:skillId - Remove skill
+[NEW] 
+src/routes/certification.routes.js
+Certifications routes (/api/v1/candidate/certifications):
+
+POST / - Add certification
+DELETE /:certificationId - Remove certification
+[NEW] 
+src/routes/document.routes.js
+Documents routes (/api/v1/candidate/documents):
+
+POST / - Upload document metadata
+GET / - List documents
+DELETE /:documentId - Delete document
+[NEW] 
+src/routes/application.routes.js
+Applications routes (/api/v1/candidate/applications):
+
+POST / - Submit application
+GET / - List applications
+GET /:applicationId - Get application details
+[NEW] 
+src/routes/activity.routes.js
+Activity routes (/api/v1/candidate/activity):
+
+GET / - List activity history
+[NEW] 
+src/routes/admin.routes.js
+Internal admin routes (/internal/candidate):
+
+GET /:candidateId - Admin get candidate profile
+PATCH /documents/:documentId/verify - Admin verify document
+Protected with internal service secret (future implementation).
+
+[NEW] 
+src/routes/index.js
+Main router mounting all route modules and health/metrics endpoints.
+
+Health & Observability
+[NEW] 
+src/health/healthRouter.js
+Health check endpoints:
+
+GET /health - Basic health check
+GET /ready - Readiness check (includes DB connection status)
+[NEW] 
+src/metrics/metricsRouter.js
+Metrics endpoint:
+
+GET /metrics - Service metrics (uptime, memory, etc.)
+Documentation
+[NEW] 
+README.md
+Comprehensive service documentation:
+
+Service overview and purpose
+Architecture and dependencies
+Setup instructions
+API endpoint reference
+Environment variables
+Development workflow
+Testing guidelines
+[NEW] 
+docs/API.md
+Detailed API documentation with request/response examples for all endpoints.
+
+Verification Plan
+Automated Tests
+Unit Tests (Jest):
+
+Profile completion calculator service
+Snapshot builder service
+Model validation rules
+Middleware (JWT verification, role checking)
+Integration Tests (Supertest):
+
+Profile CRUD operations
+Education/Experience CRUD with soft deletes
+Skills/Certifications management
+Document metadata operations
+Application submission with duplicate prevention
+Activity logging
+Profile completion status updates
+Test Commands:
+
+npm test                    # Run all tests
+npm test -- --coverage      # Run with coverage report
+Manual Verification
+Local Development Testing:
+
+Start MongoDB locally
+Start Auth Service (for JWT token generation)
+Start Candidate Service: npm run dev
+Use Postman/Thunder Client to test endpoints:
+Register user via Auth Service
+Login to get JWT token
+Initialize candidate profile
+Add education, experience, skills
+Upload document metadata
+Check profile completion status
+Submit application
+View activity logs
+Database Verification:
+
+Verify indexes are created correctly
+Check soft delete behavior (isDeleted flag)
+Verify unique constraints (candidateId + jobId for applications)
+Confirm timestamps are auto-managed
+Security Verification:
+
+Attempt access without JWT → 401 Unauthorized
+Attempt access with non-candidate role → 403 Forbidden
+Verify data isolation (candidate A cannot access candidate B's data)
+Test JWT expiration handling
+Health Check Verification:
+
+GET /health → 200 OK
+GET /ready → 200 OK (when DB connected)
+GET /metrics → Service metrics returned
