@@ -743,13 +743,11 @@ Run with: `bash test-candidate-service.sh`
 
 ---
 
-## 📚 Next Steps
 
-After manual testing:
-1. Write automated tests with Jest + Supertest
-2. Set up integration tests
-3. Add API documentation (Swagger/OpenAPI)
-4. Configure CI/CD pipeline
-5. Deploy to staging environment
+for swagger ui:
 
-Happy Testing! 🚀
+Manual Verification
+Start service: npm run dev
+Navigate to http://localhost:3004/api-docs
+Verify all endpoints are listed
+Test "Try it out" functionality with a valid JWT token
